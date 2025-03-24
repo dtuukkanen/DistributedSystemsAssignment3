@@ -78,7 +78,6 @@ class ChatServer:
                 try:
                     message = json.loads(data)
                     self.process_message(client_socket, message)
-                    print(f"Received message from {nickname}: {message}")
                 except json.JSONDecodeError:
                     self.send_message_to_client(client_socket, {
                         "type": "server_message",
@@ -133,7 +132,6 @@ class ChatServer:
         """Send a message to a specific client."""
         try:
             client_socket.send(json.dumps(message).encode('utf-8'))
-            print(f"Sent message to {self.clients[client_socket]['nickname']}: {message}")
         except Exception as e:
             print(f"Error sending message: {e}")
 
