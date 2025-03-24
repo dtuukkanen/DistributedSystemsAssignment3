@@ -144,6 +144,10 @@ class ChatClient:
             print(f"Users in channel {channel}:")
             for user in users:
                 print(f"- {user}")
+        
+        elif message_type == "error":
+            error_message = message.get("content", "Unknown error")
+            print(f"[Error] {error_message}")
 
     def disconnect(self):
         """Disconnect from the server."""

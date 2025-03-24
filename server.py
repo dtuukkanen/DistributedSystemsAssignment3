@@ -113,7 +113,7 @@ class ChatServer:
         
         elif message_type == "join_channel":
             new_channel = message.get("channel", "")
-            self.change_channel(client_socket, new_channel)
+            self.join_channel(client_socket, new_channel)
 
         elif message_type == "list_channels":
             self.list_channels(client_socket)
@@ -121,6 +121,13 @@ class ChatServer:
         elif message_type == "list_users":
             channel = message.get("channel", current_channel)
             self.list_users(client_socket, channel)
+        
+        else:
+            self.send_message_to_client(client_socket, {
+                "type": "error",
+                "content": "Unknown message type."
+            })
+            print(f"Unknown message type from {sender}: {message_type}")
 
     def send_message_to_client(self, client_socket, message):
         """Send a message to a specific client."""
