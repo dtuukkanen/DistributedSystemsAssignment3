@@ -59,7 +59,7 @@ class ChatClient:
         """Send a chat message to the current channel."""
         self.send_message({
             "type": "chat",
-            content: content
+            "content": content
         })
 
     def send_private_message(self, recipient, content):
