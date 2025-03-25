@@ -1,6 +1,7 @@
 import socket
 import threading
 import json
+import time
 
 class ChatClient:
     def __init__(self):
@@ -152,12 +153,31 @@ class ChatClient:
     def disconnect(self):
         """Disconnect from the server."""
         if self.connected:
+            print("Disconnecting from server...")
             self.connected = False
+
             try:
-                self.socket.close()
+                # Send a disconnect message to the server if possible
+                self.send_message({
+                    "type": "disconnect"
+                })
+
+                # Shord delay to allow the message to be sent
+                time.sleep(0.5)
             except:
                 pass
-            print("Disconnected from server")
+
+            try:
+                # Shutdown the socket properly before closing
+                self.socket.shutdown(socket.SHUT_RDWR)
+            except:
+                pass
+
+            try:
+                self.socket.close()
+                print("Socket closed successfully")
+            except:
+                print("Error closing socket")
 
 def display_menu():
     """Display the client menu."""

@@ -88,7 +88,10 @@ class ChatServer:
         except ConnectionError:
             print(f"Connection error with {client_address}")
             pass  # Client disconnected
+        except Exception as e:
+            print(f"Unexpected error handling {client_address}: {e}")
         finally:
+            print(f"Cleaning up connection for {client_address}")
             self.handle_client_disconnect(client_socket)
 
     def process_message(self, client_socket, message):
@@ -97,7 +100,12 @@ class ChatServer:
         sender = self.clients[client_socket]["nickname"]
         current_channel = self.clients[client_socket]["channel"]
 
-        if message_type == "chat":
+        if message_type == "disconnect":
+            # Client is explicitly disconnecting
+            print(f"Client {sender} sent disconnect message")
+            raise ConnectionError("Client requested disconnect")
+
+        elif message_type == "chat":
             content = message.get("content", "")
             self.broadcast_message({
                 "type": "chat",
@@ -138,11 +146,19 @@ class ChatServer:
     def broadcast_message(self, message, exclude=None, channel=None):
         """Broadcast a message to all clients in a channel."""
         with self.lock:
-            recipients = self.channels.get(channel, set()) if channel else set(self.clients.keys())
+            if channel and channel in self.channels:
+                recipients = list(self.channels[channel])  # Make a copy to avoid modification issues
+            else:
+                recipients = list(self.clients.keys())
+            
+            print(f"Broadcasting to {len(recipients)} clients in channel {channel}")
+            
             for client_socket in recipients:
                 if client_socket != exclude and client_socket in self.clients:
-                    self.send_message_to_client(client_socket, message)
-                    print(f"Sent message to {self.clients[client_socket]['nickname']} in channel {channel}")
+                    try:
+                        self.send_message_to_client(client_socket, message)
+                    except Exception as e:
+                        print(f"Error broadcasting to client: {e}")
 
     def send_private_message(self, sender_socket, recipient_name, content):
         """Send a private message to a specific user."""
@@ -162,15 +178,8 @@ class ChatServer:
                 "sender": sender_name,
                 "content": content
             })
-            print(f"Private message sent from {sender_name} to {recipient_name}: {content}")
+            print(f"Private message sent from {sender_name} to {recipient_name}")
 
-            # Send confirmation to sender
-            self.send_message_to_client(sender_socket, {
-                "type": "private_sent",
-                "recipient": recipient_name,
-                "content": content
-            })
-            print(f"Private message confirmation sent to {sender_name}")
         else:
             self.send_message_to_client(sender_socket, {
                 "type": "server_message",
@@ -241,27 +250,46 @@ class ChatServer:
 
     def handle_client_disconnect(self, client_socket):
         """Clean up when a client disconnects."""
-        with self.lock:
-            if client_socket in self.clients:
-                nickname = self.clients[client_socket]["nickname"]
-                channel = self.clients[client_socket]["channel"]
+        try:
+            with self.lock:
+                if client_socket in self.clients:
+                    # Get client info before removal
+                    nickname = self.clients[client_socket]["nickname"]
+                    channel = self.clients[client_socket]["channel"]
 
-                # Remove from channels
-                if channel in self.channels:
-                    self.channels[channel].discard(client_socket)
+                    print(f"Disconnecting client {nickname} from channel {channel}")
 
-                # Remove client
-                del self.clients[client_socket]
+                    # Notify all users in the channel about the disconnection
+                    for socket in list(self.channels.get(channel, set())):
+                        if socket != client_socket and socket in self.clients:
+                            try:
+                                self.send_message_to_client(socket, {
+                                    "type": "server_message",
+                                    "content": f"{nickname} has left the chat."
+                                })
+                            except Exception as e:
+                                print(f"Error notifying client about disconnect: {e}")
+                    
+                    # Remove from all channels (in case client is in multiple)
+                    for channel_name, clients in self.channels.items():
+                        if client_socket in clients:
+                            clients.discard(client_socket)
+                            print(f"Removed {nickname} from channel {channel_name}")
 
-                # Notify others
-                self.broadcast_message({
-                    "type": "server_message",
-                    "content": f"{nickname} has left the chat!."
-                }, channel=channel)
-                print(f"Broadcasted leave message for {nickname}")
+                    # Remove client from clients dict
+                    del self.clients[client_socket]
+                    print(f"Removed {nickname} from clients list")
+                else:
+                    print(f"Client socket not found in clients dict during disconnect")
+        except Exception as e:
+            print(f"Error in disconnect handler: {e}")
 
-        client_socket.close()
-        print(f"Client {nickname} disconnected")
+        # Close the socket outside the lock
+        try:
+            client_socket.close()
+            print(f"Closed socket for client {nickname}")
+        except Exception as e:
+            print(f"Error closing client socket: {e}")
 
 if __name__ == "__main__":
     server = ChatServer()
